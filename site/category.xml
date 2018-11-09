@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<site>
+   <description url="http://m2eclipse.sonatype.org/site">
+      Eclipse Enhanced Search
+   </description>
+   <feature url="features/com.helospark.eclipse-enhanced-search-feature_1.0.0.qualifier.jar" id="com.helospark.eclipse-enhanced-search-feature" version="1.0.0.qualifier">
+      <category name="com.helospark.eclipse-enhanced-search.site"/>
+   </feature>
+   <category-def name="com.helospark.eclipse-enhanced-search.site" label="Eclipse Enhanced Search"/>
+</site>

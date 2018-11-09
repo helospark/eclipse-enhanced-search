@@ -1,0 +1,8 @@
+.settings/
+.metadata
+*/build
+bin/
+*/test-output
+*/target
+*/test-classes
+.project
