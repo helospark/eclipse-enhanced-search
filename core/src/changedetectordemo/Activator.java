@@ -2,11 +2,11 @@ package changedetectordemo;
 
 import org.eclipse.jdt.core.JavaCore;
 import org.eclipse.jface.resource.ImageDescriptor;
+import org.eclipse.ui.IStartup;
 import org.eclipse.ui.plugin.AbstractUIPlugin;
 import org.osgi.framework.BundleContext;
 
-import com.helospark.lightdi.LightDiContext;
-
+import changedetectordemo.handlers.LuceneSearchAdaptor;
 import changedetectordemo.handlers.MyListener;
 import changedetectordemo.indexing.JarFileIndexer;
 import changedetectordemo.indexing.LuceneWriteIndexFromFileExample;
@@ -15,7 +15,7 @@ import changedetectordemo.indexing.UniqueNameCalculator;
 /**
  * The activator class controls the plug-in life cycle
  */
-public class Activator extends AbstractUIPlugin {
+public class Activator extends AbstractUIPlugin implements IStartup {
 
     // The plug-in ID
     public static final String PLUGIN_ID = "ChangeDetectorDemo"; //$NON-NLS-1$
@@ -29,7 +29,7 @@ public class Activator extends AbstractUIPlugin {
     public Activator() {
     }
 
-    public static LightDiContext lightDiontext;
+    public static LuceneSearchAdaptor luceneSearchAdaptor;
 
     /*
      * (non-Javadoc)
@@ -42,12 +42,12 @@ public class Activator extends AbstractUIPlugin {
         super.start(context);
         System.out.println("Started");
 
-        UniqueNameCalculator unc = new UniqueNameCalculator();
-        LuceneWriteIndexFromFileExample lwi = new LuceneWriteIndexFromFileExample(unc);
-        JarFileIndexer jfi = new JarFileIndexer(lwi, unc);
-        MyListener listener = new MyListener(jfi, lwi, unc);
-
-        JavaCore.addElementChangedListener(listener);
+//        UniqueNameCalculator unc = new UniqueNameCalculator();
+//        LuceneWriteIndexFromFileExample lwi = new LuceneWriteIndexFromFileExample(unc);
+//        JarFileIndexer jfi = new JarFileIndexer(lwi, unc);
+//        MyListener listener = new MyListener(jfi, lwi, unc);
+//
+//        JavaCore.addElementChangedListener(listener);
 
         plugin = this;
 
@@ -83,5 +83,17 @@ public class Activator extends AbstractUIPlugin {
      */
     public static ImageDescriptor getImageDescriptor(String path) {
         return imageDescriptorFromPlugin(PLUGIN_ID, path);
+    }
+
+    @Override
+    public void earlyStartup() {
+        UniqueNameCalculator unc = new UniqueNameCalculator();
+        LuceneWriteIndexFromFileExample lwi = new LuceneWriteIndexFromFileExample(unc);
+        JarFileIndexer jfi = new JarFileIndexer(lwi, unc);
+        luceneSearchAdaptor = new LuceneSearchAdaptor(jfi, lwi);
+        MyListener listener = new MyListener(jfi, luceneSearchAdaptor, unc);
+
+        JavaCore.addElementChangedListener(listener);
+
     }
 }

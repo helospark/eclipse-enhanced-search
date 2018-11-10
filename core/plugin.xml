@@ -18,7 +18,7 @@
          point="org.eclipse.ui.handlers">
       <handler
             commandId="ChangeDetectorDemo.commands.sampleCommand"
-            class="changedetectordemo.handlers.SampleHandler">
+            class="changedetectordemo.handlers.DialogOpenerHandler">
       </handler>
    </extension>
    <extension
@@ -57,6 +57,12 @@
             </command>
          </toolbar>
       </menuContribution>
+   </extension>
+   <extension
+         point="org.eclipse.ui.startup">
+      <startup
+            class="changedetectordemo.Activator">
+      </startup>
    </extension>
 
 </plugin>

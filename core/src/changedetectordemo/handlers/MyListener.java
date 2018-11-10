@@ -7,7 +7,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 import org.eclipse.core.runtime.IAdaptable;
 import org.eclipse.jdt.core.ElementChangedEvent;
@@ -17,9 +16,6 @@ import org.eclipse.jdt.core.IJavaElement;
 import org.eclipse.jdt.core.IJavaElementDelta;
 import org.eclipse.jdt.core.IJavaProject;
 import org.eclipse.jdt.core.JavaModelException;
-import org.eclipse.jdt.internal.core.JarEntryDirectory;
-import org.eclipse.jdt.internal.core.JarEntryFile;
-import org.eclipse.jdt.internal.core.JarEntryResource;
 import org.eclipse.jdt.internal.core.JarPackageFragmentRoot;
 import org.eclipse.jdt.internal.ui.packageview.ClassPathContainer;
 import org.eclipse.jdt.internal.ui.packageview.LibraryContainer;
@@ -27,24 +23,22 @@ import org.eclipse.jface.viewers.ILabelProviderListener;
 import org.eclipse.jface.viewers.IStructuredContentProvider;
 import org.eclipse.jface.viewers.ITableLabelProvider;
 import org.eclipse.swt.graphics.Image;
-import org.eclipse.swt.widgets.Display;
 
 import com.helospark.lightdi.annotation.Component;
 
 import changedetectordemo.indexing.JarFileIndexer;
-import changedetectordemo.indexing.LuceneWriteIndexFromFileExample;
-import changedetectordemo.indexing.LuceneWriteIndexFromFileExample.LuceneSearchResult;
 import changedetectordemo.indexing.UniqueNameCalculator;
 
 @Component
+@SuppressWarnings("restriction")
 public class MyListener implements IElementChangedListener {
     private JarFileIndexer indexer;
-    private LuceneWriteIndexFromFileExample luceneAdaptor;
+    private LuceneSearchAdaptor luceneSearchAdaptor;
     private UniqueNameCalculator uniqueNameCalculator;
 
-    public MyListener(JarFileIndexer indexer, LuceneWriteIndexFromFileExample luceneAdaptor, UniqueNameCalculator uniqueNameCalculator) {
+    public MyListener(JarFileIndexer indexer, LuceneSearchAdaptor luceneSearchAdaptor, UniqueNameCalculator uniqueNameCalculator) {
         this.indexer = indexer;
-        this.luceneAdaptor = luceneAdaptor;
+        this.luceneSearchAdaptor = luceneSearchAdaptor;
         this.uniqueNameCalculator = uniqueNameCalculator;
     }
 
@@ -83,7 +77,7 @@ public class MyListener implements IElementChangedListener {
     private void notifyClasspathChanged(IJavaProject el) {
         IClasspathEntry[] rawClasspath;
         List<LuceneRequest> path = new ArrayList<>();
-        Map<String, JarPackageFragmentRoot> map = new HashMap<>();
+        Map<String, List<JarPackageFragmentRoot>> map = new HashMap<>();
         try {
             rawClasspath = el.getRawClasspath();
             for (IClasspathEntry entry : rawClasspath) {
@@ -98,7 +92,13 @@ public class MyListener implements IElementChangedListener {
                                     .ifPresent(a -> {
                                         String uniqueId = uniqueNameCalculator.calculateUniqueId(a);
                                         path.add(new LuceneRequest(uniqueId, a));
-                                        map.put(uniqueId, jpf);
+                                        map.compute(uniqueId, (k, v) -> {
+                                            if (v == null) {
+                                                v = new ArrayList<>();
+                                            }
+                                            v.add(jpf);
+                                            return v;
+                                        });
                                     });
                         }
 
@@ -121,54 +121,7 @@ public class MyListener implements IElementChangedListener {
                 e.printStackTrace();
             }
         }
-        indexer.waitUntilIndexingFinishes();
-        List<LuceneSearchResult> names = luceneAdaptor.findFile(path, "pom*");
-        List<JarFileInformation> result = names.stream()
-                .map(a -> new JarFileInformation(a.fullyQualifiedName, createPath(map, a)))
-                .collect(Collectors.toList());
-
-        System.out.println("Result: " + result);
-
-        Display.getDefault().asyncExec(() -> {
-//      try {
-            new FileTreeWindow(result);
-//        EditorUtility.openInEditor(asd);
-//      } catch (PartInitException e) {
-            // TODO Auto-generated catch block
-//        e.printStackTrace();
-//      }
-        });
-    }
-
-    private JarEntryFile createPath(Map<String, JarPackageFragmentRoot> map, LuceneSearchResult a) {
-        JarPackageFragmentRoot root = map.get(a.jarName);
-        String fqn = a.fullyQualifiedName;
-        if (fqn.endsWith(".java")) {
-            fqn = fqn.replaceAll("\\.java", "\\.class");
-        }
-        String[] parts = fqn.split("/");
-
-        Object parent = root;
-        for (int i = 0; i < parts.length - 1; ++i) {
-            JarEntryDirectory dir = new JarEntryDirectory(parts[i]);
-            dir.setParent(parent);
-            parent = dir;
-        }
-
-        JarEntryFile resource = new JarEntryFile(parts[parts.length - 1]);
-        resource.setParent(parent);
-        return resource;
-    }
-
-    private void addResource(List<JarFileInformation> result, Object child, Object object) throws JavaModelException {
-        if (object instanceof JarEntryDirectory) {
-            for (Object asd : ((JarEntryDirectory) object).getChildren())
-                addResource(result, child, asd);
-        }
-        if (object instanceof JarEntryFile) {
-            JarEntryResource oj = (JarEntryResource) object;
-            result.add(new JarFileInformation(((JarPackageFragmentRoot) child).getSourceAttachmentPath() + oj.getFullPath().toString(), oj));
-        }
+        luceneSearchAdaptor.setClasspathInfo(path, map);
     }
 
     class FileTreeContentProvider implements IStructuredContentProvider {
@@ -192,9 +145,9 @@ public class MyListener implements IElementChangedListener {
 
     static class JarFileInformation {
         public String name;
-        public JarEntryResource file;
+        public Object file;
 
-        public JarFileInformation(String name, JarEntryResource file) {
+        public JarFileInformation(String name, Object file) {
             this.name = name;
             this.file = file;
         }
