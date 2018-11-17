@@ -1,19 +1,21 @@
 package changedetectordemo.handlers;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
+import java.util.Map;
 
+import org.eclipse.jdt.internal.core.JarEntryDirectory;
+import org.eclipse.jdt.internal.core.JarEntryFile;
+import org.eclipse.jdt.internal.core.JarPackageFragmentRoot;
+import org.eclipse.jdt.internal.core.PackageFragment;
 import org.eclipse.jdt.internal.ui.javaeditor.EditorUtility;
 import org.eclipse.jface.dialogs.IDialogConstants;
-import org.eclipse.jface.viewers.ILabelProviderListener;
-import org.eclipse.jface.viewers.IStructuredContentProvider;
-import org.eclipse.jface.viewers.ITableLabelProvider;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.KeyAdapter;
 import org.eclipse.swt.events.KeyEvent;
 import org.eclipse.swt.events.MouseEvent;
 import org.eclipse.swt.events.MouseListener;
-import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Composite;
@@ -27,18 +29,22 @@ import org.eclipse.swt.widgets.Text;
 import org.eclipse.ui.PartInitException;
 import org.eclipse.ui.dialogs.SelectionStatusDialog;
 
-import changedetectordemo.handlers.MyListener.JarFileInformation;
+import changedetectordemo.handlers.DialogOpenerHandler.IndexReaderAndMappingDomain;
+import changedetectordemo.indexing.LuceneWriteIndexFromFileExample;
+import changedetectordemo.indexing.LuceneWriteIndexFromFileExample.LuceneSearchResult;
 
 public class FileTreeWindow extends SelectionStatusDialog {
     private boolean multi;
     private Text pattern;
     private Table list;
     private String initialPatternText;
-    private LuceneSearchAdaptor adaptor;
+    private IndexReaderAndMappingDomain indexReader;
+    private LuceneWriteIndexFromFileExample luceneWriteIndexFromFileExample;
 
-    public FileTreeWindow(Shell shell, LuceneSearchAdaptor adaptor) {
+    public FileTreeWindow(Shell shell, IndexReaderAndMappingDomain indexReader, LuceneWriteIndexFromFileExample luceneWriteIndexFromFileExample) {
         super(shell);
-        this.adaptor = adaptor;
+        this.indexReader = indexReader;
+        this.luceneWriteIndexFromFileExample = luceneWriteIndexFromFileExample;
     }
 
     @Override
@@ -81,20 +87,16 @@ public class FileTreeWindow extends SelectionStatusDialog {
                 String file = pattern.getText();
                 if (file.length() > 1) {
                     String newFile = file + "*";
-                    CompletableFuture.supplyAsync(() -> adaptor.findFile(newFile))
-                            .thenAccept(a -> {
-                                Display.getDefault().asyncExec(() -> {
-                                    list.removeAll();
-                                    for (var b : a) {
-                                        TableItem ti = new TableItem(list, SWT.NONE);
-                                        ti.setData(b);
-                                        ti.setText(b.name);
-                                    }
-                                });
-                            }).exceptionally(asd -> {
-                                asd.printStackTrace();
-                                return null;
-                            });
+                    List<LuceneSearchResult> result = luceneWriteIndexFromFileExample.findFile(indexReader.indexReader, newFile);
+
+                    Display.getDefault().asyncExec(() -> {
+                        list.removeAll();
+                        for (var b : result) {
+                            TableItem ti = new TableItem(list, SWT.NONE);
+                            ti.setData(b);
+                            ti.setText(b.fullyQualifiedName);
+                        }
+                    });
                 }
             }
         });
@@ -114,12 +116,12 @@ public class FileTreeWindow extends SelectionStatusDialog {
             @Override
             public void mouseDoubleClick(MouseEvent e) {
                 TableItem selection = list.getSelection()[0];
-                JarFileInformation jarInformation = (JarFileInformation) selection.getData();
+                LuceneSearchResult jarInformation = (LuceneSearchResult) selection.getData();
+                Object path = FileTreeWindow.createPath(indexReader.pathToJarFileConverter, jarInformation);
 
-                Object inf = jarInformation.file;
                 thiz.close();
                 try {
-                    EditorUtility.openInEditor(inf);
+                    EditorUtility.openInEditor(path);
                 } catch (PartInitException sgdnjimsafsfaasdfasdfasdfy) {
                     sgdnjimsafsfaasdfasdfasdfy.printStackTrace();
                 }
@@ -159,47 +161,74 @@ public class FileTreeWindow extends SelectionStatusDialog {
         // TODO Auto-generated method stub
 
     }
-}
 
-class FileTreeContentProvider implements IStructuredContentProvider {
-
-    @SuppressWarnings("unchecked")
-    @Override
-    public Object[] getElements(Object inputElement) {
-        if (inputElement instanceof List) {
-            return ((List<JarFileInformation>) inputElement).toArray();
+    public static Object createPath(Map<String, List<JarPackageFragmentRoot>> map, LuceneSearchResult a) {
+        JarPackageFragmentRoot root;
+        List<JarPackageFragmentRoot> filesWhereCurrentSourceIsAttached = map.get(a.jarPath);
+        if (filesWhereCurrentSourceIsAttached.size() == 1) {
+            root = filesWhereCurrentSourceIsAttached.get(0);
         } else {
-            return (Object[]) inputElement;
+            root = attemptToFindCorrectJar(a.fullyQualifiedName, filesWhereCurrentSourceIsAttached);
         }
+        String fqn = a.fullyQualifiedName;
+        if (fqn.endsWith(".java")) {
+            fqn = fqn.replaceAll("\\.java", "\\.class");
+
+//            root.getClassFile();
+
+        }
+        String[] parts = fqn.split("/");
+
+        if (fqn.endsWith(".class")) {
+            String[] newParts = Arrays.copyOf(parts, parts.length - 1);
+            if (root.getModuleDescription() != null) {
+                // TODO: is this right???
+                newParts = Arrays.copyOfRange(newParts, 1, newParts.length);
+            }
+            PackageFragment qweqweq = root.getPackageFragment(newParts);
+            return qweqweq.getClassFile(parts[parts.length - 1]);
+        }
+
+        Object parent = root;
+        for (int i = 0; i < parts.length - 1; ++i) {
+            JarEntryDirectory dir = new JarEntryDirectory(parts[i]);
+            dir.setParent(parent);
+            parent = dir;
+        }
+
+        JarEntryFile resource = new JarEntryFile(parts[parts.length - 1]);
+        resource.setParent(parent);
+        return resource;
     }
 
-}
+    // This hack is massive. It tries to find the correct jar in case there are
+    // multiple (as in case of modularized JDK).
+    // On a side node, you can search for "Hack" now in your codebase and
+    // dependencies.
+    private static JarPackageFragmentRoot attemptToFindCorrectJar(String fullyQualifiedName, List<JarPackageFragmentRoot> filesWhereCurrentSourceIsAttached) {
+        int dotIndex = fullyQualifiedName.indexOf('.');
+        int slashIndex = fullyQualifiedName.indexOf('/');
 
-class FileTreeLabelProvider implements ITableLabelProvider {
+        String packageNameWithoutModule = fullyQualifiedName;
+        if (dotIndex != -1 && dotIndex < slashIndex) {
+            packageNameWithoutModule = packageNameWithoutModule.substring(slashIndex + 1);
+        }
+        String[] parts = packageNameWithoutModule.split("/");
+        parts = Arrays.copyOf(parts, parts.length - 1);
 
-    public FileTreeLabelProvider() {
-    }
-
-    public void addListener(ILabelProviderListener arg0) {
-    }
-
-    public void dispose() {
-    }
-
-    public boolean isLabelProperty(Object arg0, String arg1) {
-        return false;
-    }
-
-    public void removeListener(ILabelProviderListener arg0) {
-    }
-
-    @Override
-    public Image getColumnImage(Object element, int columnIndex) {
-        return null;
-    }
-
-    @Override
-    public String getColumnText(Object element, int columnIndex) {
-        return ((JarFileInformation) element).name;
+        List<JarPackageFragmentRoot> result = new ArrayList<>();
+        for (var root : filesWhereCurrentSourceIsAttached) {
+            if (root.getPackageFragment(parts).exists()) {
+                result.add(root);
+            }
+        }
+        if (result.size() == 0) {
+            System.out.println("No files");
+            return filesWhereCurrentSourceIsAttached.get(0);
+        }
+        if (result.size() > 1) {
+            System.out.println("Same package in multiple files");
+        }
+        return result.get(result.size() - 1);
     }
 }

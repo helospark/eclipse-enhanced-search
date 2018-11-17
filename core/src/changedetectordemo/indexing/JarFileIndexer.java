@@ -4,70 +4,79 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Collection;
+import java.nio.file.Paths;
 import java.util.Enumeration;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
+import org.apache.lucene.index.DirectoryReader;
+import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
+import org.apache.lucene.store.FSDirectory;
 
 import com.helospark.lightdi.annotation.Component;
 
-import changedetectordemo.handlers.MyListener.LuceneRequest;
+import changedetectordemo.handlers.LuceneIndexRepository;
 
 @Component
 public class JarFileIndexer {
-    private ExecutorService executorService = Executors.newFixedThreadPool(1);
-    private ConcurrentHashMap<String, CompletableFuture<Void>> inprogressIndexing = new ConcurrentHashMap<>();
     private LuceneWriteIndexFromFileExample luceneWriteIndexFromFileExample;
     private UniqueNameCalculator uniqueNameCalculator;
+    private LuceneIndexRepository repository;
 
-    public JarFileIndexer(LuceneWriteIndexFromFileExample luceneWriteIndexFromFileExample, UniqueNameCalculator uniqueNameCalculator) {
+    public JarFileIndexer(LuceneWriteIndexFromFileExample luceneWriteIndexFromFileExample, UniqueNameCalculator uniqueNameCalculator, LuceneIndexRepository repository) {
         this.luceneWriteIndexFromFileExample = luceneWriteIndexFromFileExample;
         this.uniqueNameCalculator = uniqueNameCalculator;
+        this.repository = repository;
     }
 
-    public void indexFile(LuceneRequest request) throws IOException {
-        inprogressIndexing.putIfAbsent(request.uniqueId,
-                CompletableFuture.runAsync(() -> indexSingleFile(request.file, request.uniqueId), executorService));
+    public IndexReader indexFile(File file) throws IOException {
+        return indexSingleFile(file);
     }
 
-    private void indexSingleFile(File file, String uniqueId) {
-        if (luceneWriteIndexFromFileExample.hasIndex(uniqueId)) {
-            return;
-        }
-        System.out.println("Actually indexing " + file.getName());
-        IndexWriter writer = luceneWriteIndexFromFileExample.indexContentTo(uniqueId);
-        if (file.getName().endsWith(".jar") || file.getName().endsWith(".zip")) {
-            try (ZipFile zipFile = new ZipFile(file)) {
-                Enumeration<? extends ZipEntry> entries = zipFile.entries();
+    private IndexReader indexSingleFile(File file) {
+        String indexName = uniqueNameCalculator.indexPathCalculator(file);
 
-                while (entries.hasMoreElements()) {
-                    ZipEntry entry = entries.nextElement();
-                    if (!entry.isDirectory()) {
-                        try (InputStream inputStream = zipFile.getInputStream(entry)) {
-                            String data = readString(inputStream);
-                            String path = entry.getName();
+        if (!new File(indexName).exists()) {
 
-                            luceneWriteIndexFromFileExample.addToIndex(writer, new IndexEntity(data, path, uniqueId));
-                        } catch (IOException e) {
-                            throw new RuntimeException("Error unzipping file ", e);
+            System.out.println("Actually indexing " + file.getName());
+            if (file.getName().endsWith(".jar") || file.getName().endsWith(".zip")) {
+                try (ZipFile zipFile = new ZipFile(file)) {
+                    IndexWriter writer = luceneWriteIndexFromFileExample.indexContentTo(indexName);
+                    Enumeration<? extends ZipEntry> entries = zipFile.entries();
+
+                    while (entries.hasMoreElements()) {
+                        ZipEntry entry = entries.nextElement();
+                        if (!entry.isDirectory()) {
+                            try (InputStream inputStream = zipFile.getInputStream(entry)) {
+                                String data = readString(inputStream);
+                                String path = entry.getName();
+
+                                luceneWriteIndexFromFileExample.addToIndex(writer, new IndexEntity(data, path, indexName, file.getAbsolutePath()));
+                            } catch (IOException e) {
+                                throw new RuntimeException("Error unzipping file ", e);
+                            }
                         }
                     }
+                    writer.close();
+                    DirectoryReader reader = DirectoryReader.open(FSDirectory.open(Paths.get(indexName)));
+                    repository.addIndexerForId(indexName, reader);
+                    return reader;
+                } catch (IOException e1) {
+                    e1.printStackTrace();
+                    throw new RuntimeException(e1);
                 }
-            } catch (IOException e1) {
-                e1.printStackTrace();
             }
+        } else {
+            DirectoryReader reader;
             try {
-                writer.close();
+                reader = DirectoryReader.open(FSDirectory.open(Paths.get(indexName)));
+                repository.addIndexerForId(indexName, reader);
             } catch (IOException e) {
-                e.printStackTrace();
+                throw new RuntimeException(e);
             }
         }
+        throw new RuntimeException("Not supported");
     }
 
     public static String readString(InputStream inputStream) throws IOException {
@@ -78,11 +87,6 @@ public class JarFileIndexer {
         }
         into.close();
         return new String(into.toByteArray(), "UTF-8");
-    }
-
-    public void waitUntilIndexingFinishes() {
-        Collection<CompletableFuture<Void>> values = inprogressIndexing.values();
-        CompletableFuture.allOf(values.toArray(new CompletableFuture[values.size()])).join();
     }
 
 }

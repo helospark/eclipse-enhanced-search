@@ -1,13 +1,11 @@
 package changedetectordemo;
 
-import org.eclipse.jdt.core.JavaCore;
 import org.eclipse.jface.resource.ImageDescriptor;
 import org.eclipse.ui.IStartup;
 import org.eclipse.ui.plugin.AbstractUIPlugin;
 import org.osgi.framework.BundleContext;
 
-import changedetectordemo.handlers.LuceneSearchAdaptor;
-import changedetectordemo.handlers.MyListener;
+import changedetectordemo.handlers.LuceneIndexRepository;
 import changedetectordemo.indexing.JarFileIndexer;
 import changedetectordemo.indexing.LuceneWriteIndexFromFileExample;
 import changedetectordemo.indexing.UniqueNameCalculator;
@@ -29,7 +27,20 @@ public class Activator extends AbstractUIPlugin implements IStartup {
     public Activator() {
     }
 
-    public static LuceneSearchAdaptor luceneSearchAdaptor;
+//    public static LuceneSearchAdaptor luceneSearchAdaptor;
+
+    public static LuceneIndexRepository luceneIndexRepository;
+
+    public static JarFileIndexer jarFileIndexer;
+
+    public static LuceneWriteIndexFromFileExample luceneWriteIndexFromFileExample;
+
+    static {
+        UniqueNameCalculator unc = new UniqueNameCalculator();
+        luceneWriteIndexFromFileExample = new LuceneWriteIndexFromFileExample(unc);
+        luceneIndexRepository = new LuceneIndexRepository(unc);
+        jarFileIndexer = new JarFileIndexer(luceneWriteIndexFromFileExample, unc, luceneIndexRepository);
+    }
 
     /*
      * (non-Javadoc)
@@ -41,14 +52,6 @@ public class Activator extends AbstractUIPlugin implements IStartup {
     public void start(BundleContext context) throws Exception {
         super.start(context);
         System.out.println("Started");
-
-//        UniqueNameCalculator unc = new UniqueNameCalculator();
-//        LuceneWriteIndexFromFileExample lwi = new LuceneWriteIndexFromFileExample(unc);
-//        JarFileIndexer jfi = new JarFileIndexer(lwi, unc);
-//        MyListener listener = new MyListener(jfi, lwi, unc);
-//
-//        JavaCore.addElementChangedListener(listener);
-
         plugin = this;
 
     }
@@ -87,13 +90,10 @@ public class Activator extends AbstractUIPlugin implements IStartup {
 
     @Override
     public void earlyStartup() {
-        UniqueNameCalculator unc = new UniqueNameCalculator();
-        LuceneWriteIndexFromFileExample lwi = new LuceneWriteIndexFromFileExample(unc);
-        JarFileIndexer jfi = new JarFileIndexer(lwi, unc);
-        luceneSearchAdaptor = new LuceneSearchAdaptor(jfi, lwi);
-        MyListener listener = new MyListener(jfi, luceneSearchAdaptor, unc);
+//        luceneSearchAdaptor = new LuceneSearchAdaptor(jarFileIndexer, luceneWriteIndexFromFileExample);
+//        MyListener listener = new MyListener(jarFileIndexer, luceneSearchAdaptor, unc);
 
-        JavaCore.addElementChangedListener(listener);
+//        JavaCore.addElementChangedListener(listener);
 
     }
 }

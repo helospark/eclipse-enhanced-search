@@ -7,7 +7,7 @@ import com.helospark.lightdi.annotation.Component;
 @Component
 public class UniqueNameCalculator {
 
-    public String calculateUniqueId(File file) {
+    public String indexPathCalculator(File file) {
 //        byte[] firstMegabyte = new byte[1024];
 //        try (FileInputStream fio = new FileInputStream(file)) {
 //            fio.read(firstMegabyte);
@@ -16,7 +16,7 @@ public class UniqueNameCalculator {
 //        } catch (Exception e) {
 //            throw new RuntimeException(e);
 //        }
-        return file.getName() + "_" + file.length();
+        return "/tmp/lucene/" + file.getName() + "_" + file.length();
     }
 //
 //    public String toHexString(byte[] bytes) {
