@@ -4,25 +4,35 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
+import javax.annotation.Generated;
+
 import org.apache.lucene.analysis.Analyzer;
+import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.core.WhitespaceAnalyzer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
-import org.apache.lucene.document.Field.Store;
-import org.apache.lucene.document.StringField;
-import org.apache.lucene.document.TextField;
+import org.apache.lucene.document.FieldType;
+import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.IndexWriterConfig.OpenMode;
 import org.apache.lucene.index.Term;
-import org.apache.lucene.queryparser.classic.QueryParser;
+import org.apache.lucene.queryparser.classic.MultiFieldQueryParser;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.search.highlight.Formatter;
+import org.apache.lucene.search.highlight.Fragmenter;
+import org.apache.lucene.search.highlight.Highlighter;
+import org.apache.lucene.search.highlight.QueryScorer;
+import org.apache.lucene.search.highlight.SimpleHTMLFormatter;
+import org.apache.lucene.search.highlight.SimpleSpanFragmenter;
+import org.apache.lucene.search.highlight.TokenSources;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 
@@ -66,22 +76,33 @@ public class LuceneWriteIndexFromFileExample {
         int slashPosition = fullPath.lastIndexOf("/");
         String fileName = slashPosition == -1 ? fullPath : fullPath.substring(slashPosition + 1);
 
-        doc.add(new StringField("path", fullPath, Field.Store.YES));
-        doc.add(new StringField("filename", fileName, Field.Store.YES));
-        doc.add(new TextField(CONTENTS_FIELD, entity.data, Store.YES));
-        doc.add(new TextField("indexPath", entity.indexPath, Store.YES));
-        doc.add(new TextField("jarPath", entity.jarPath, Store.YES));
+        doc.add(new Field("path", fullPath, createStoredAndIndexedField()));
+        doc.add(new Field("filename", fileName, createStoredAndIndexedField()));
+        doc.add(new Field(CONTENTS_FIELD, entity.data, createStoredAndIndexedField()));
+        doc.add(new Field("indexPath", entity.indexPath, createStoredAndIndexedField()));
+        doc.add(new Field("jarPath", entity.jarPath, createStoredAndIndexedField()));
 
         writer.updateDocument(new Term("path", fullPath), doc);
 
+    }
+
+    private FieldType createStoredAndIndexedField() {
+        FieldType fieldType = new FieldType();
+        fieldType.setTokenized(true);
+        fieldType.setStored(true);
+        fieldType.setStoreTermVectors(true);
+        fieldType.setStoreTermVectorPositions(true);
+        fieldType.setStoreTermVectorOffsets(true);
+        fieldType.setIndexOptions(IndexOptions.DOCS_AND_FREQS_AND_POSITIONS_AND_OFFSETS);
+        return fieldType;
     }
 
     public boolean hasIndex(String uniqueId) {
         return new File(PATH + uniqueId).exists();
     }
 
-    private IndexSearcher searcher = null;
-    private IndexReader reader;
+//    private IndexSearcher searcher = null;
+//    private IndexReader reader;
 //
 //    public void search(List<LuceneRequest> files, String content) throws IOException, InvalidTokenOffsetsException, ParseException {
 //        // analyzer with the default stop words
@@ -123,16 +144,28 @@ public class LuceneWriteIndexFromFileExample {
         return new IndexSearcher(multiReader);
     }
 
-    public List<LuceneSearchResult> findFile(IndexReader multiReader, String content) {
+    public LuceneSearchResultRoot findFile(SearchRequest request) {
         try {
             Analyzer analyzer = new WhitespaceAnalyzer();
 
-            searcher = createSearcer(multiReader);
+            IndexSearcher searcher = createSearcer(request.getMultiReader());
 
-            QueryParser qp = new QueryParser("filename", analyzer);
-            qp.setAllowLeadingWildcard(true);
-            Query query = qp.parse(content);
-            TopDocs hits = searcher.search(query, 100);
+            String[] fields = createRequest(request);
+
+            if (fields.length == 0) {
+                return new LuceneSearchResultRoot(Collections.emptyList());
+            }
+
+            MultiFieldQueryParser multiFieldQuers = new MultiFieldQueryParser(fields, analyzer);
+            multiFieldQuers.setAllowLeadingWildcard(true);
+            Query query = multiFieldQuers.parse(request.getContent());
+            TopDocs hits = searcher.search(query, 10);
+
+            Formatter formatter = new SimpleHTMLFormatter();
+            QueryScorer scorer = new QueryScorer(query);
+            Highlighter highlighter = new Highlighter(formatter, scorer);
+            Fragmenter fragmenter = new SimpleSpanFragmenter(scorer, 30);
+            highlighter.setTextFragmenter(fragmenter);
 
             List<LuceneSearchResult> fullyQualifiedNames = new ArrayList<>();
 
@@ -143,24 +176,171 @@ public class LuceneWriteIndexFromFileExample {
                 String indexPath = doc.get("indexPath");
                 String jarName = doc.get("jarPath");
 
-                System.out.println(title);
-                fullyQualifiedNames.add(new LuceneSearchResult(indexPath, title, jarName));
+//                System.out.println(title);
+                LuceneSearchResult result = new LuceneSearchResult(indexPath, title, jarName);
+
+                if (request.isIncludeContent()) {
+                    String content = doc.get(CONTENTS_FIELD);
+
+                    TokenStream stream = TokenSources.getTermVectorTokenStreamOrNull(CONTENTS_FIELD, request.getMultiReader().getTermVectors(docid), -1);
+
+                    String[] frags = highlighter.getBestFragments(stream, content, 10);
+                    for (String frag : frags) {
+                        String line = frag.replace("\n", " ");
+                        result.addTextSearchResultFragment(new TextSearchResult(line, result));
+                    }
+                }
+
+                fullyQualifiedNames.add(result);
             }
-            return fullyQualifiedNames;
+            return new LuceneSearchResultRoot(fullyQualifiedNames);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private String[] createRequest(SearchRequest request) {
+        List<String> result = new ArrayList<>();
+        if (request.isIncludeContent()) {
+            result.add(CONTENTS_FIELD);
+        }
+        if (request.isIncludeFileName()) {
+            result.add("filename");
+        }
+        if (request.isIncludeFilePath()) {
+            result.add("path");
+        }
+        return result.toArray(new String[result.size()]);
+    }
+
+    public static class LuceneSearchResultRoot {
+        public List<LuceneSearchResult> results;
+
+        public LuceneSearchResultRoot(List<LuceneSearchResult> results) {
+            this.results = results;
+        }
+
+    }
+
+    public static class SearchRequest {
+        IndexReader multiReader;
+        String content;
+        boolean includeFileName;
+        boolean includeFilePath;
+        boolean includeContent;
+
+        @Generated("SparkTools")
+        private SearchRequest(Builder builder) {
+            this.multiReader = builder.multiReader;
+            this.content = builder.content;
+            this.includeFileName = builder.includeFileName;
+            this.includeFilePath = builder.includeFilePath;
+            this.includeContent = builder.includeContent;
+        }
+
+        public IndexReader getMultiReader() {
+            return multiReader;
+        }
+
+        public String getContent() {
+            return content;
+        }
+
+        public boolean isIncludeFileName() {
+            return includeFileName;
+        }
+
+        public boolean isIncludeFilePath() {
+            return includeFilePath;
+        }
+
+        public boolean isIncludeContent() {
+            return includeContent;
+        }
+
+        @Generated("SparkTools")
+        public SearchRequest() {
+        }
+
+        @Generated("SparkTools")
+        public static Builder builder() {
+            return new Builder();
+        }
+
+        @Generated("SparkTools")
+        public static final class Builder {
+            private IndexReader multiReader;
+            private String content;
+            private boolean includeFileName;
+            private boolean includeFilePath;
+            private boolean includeContent;
+
+            private Builder() {
+            }
+
+            public Builder withMultiReader(IndexReader multiReader) {
+                this.multiReader = multiReader;
+                return this;
+            }
+
+            public Builder withContent(String content) {
+                this.content = content;
+                return this;
+            }
+
+            public Builder withIncludeFileName(boolean includeFileName) {
+                this.includeFileName = includeFileName;
+                return this;
+            }
+
+            public Builder withIncludeFilePath(boolean includeFilePath) {
+                this.includeFilePath = includeFilePath;
+                return this;
+            }
+
+            public Builder withIncludeContent(boolean includeContent) {
+                this.includeContent = includeContent;
+                return this;
+            }
+
+            public SearchRequest build() {
+                return new SearchRequest(this);
+            }
+        }
+
     }
 
     public static class LuceneSearchResult {
         public String indexPath;
         public String fullyQualifiedName;
         public String jarPath;
+        public List<TextSearchResult> textSearchResults;
 
         public LuceneSearchResult(String indexPath, String fullyQualifiedName, String jarName2) {
             this.indexPath = indexPath;
             this.fullyQualifiedName = fullyQualifiedName;
             this.jarPath = jarName2;
+            textSearchResults = new ArrayList<>();
+        }
+
+        public void addTextSearchResultFragment(TextSearchResult textSearchResult) {
+            textSearchResults.add(textSearchResult);
+        }
+
+    }
+
+    public static class TextSearchResult {
+        public String foundLine;
+        public int documentPositionStart;
+        public int documentPositionEnd;
+        public int lineStart;
+        public int lineEnd;
+
+        public LuceneSearchResult parent;
+
+        public TextSearchResult(String foundLine, LuceneSearchResult parent) {
+            this.foundLine = foundLine;
+            this.parent = parent;
         }
 
     }

@@ -36,15 +36,18 @@ public class DialogOpenerHandler extends AbstractHandler {
     private LuceneIndexRepository repository;
     private JarFileIndexer indexer;
     private LuceneWriteIndexFromFileExample luceneWriteIndexFromFileExample;
+    private SearchResultToEditorConverter searchResultToEditorConverter;
 
     public DialogOpenerHandler() {
-        this(Activator.luceneIndexRepository, Activator.jarFileIndexer, Activator.luceneWriteIndexFromFileExample);
+        this(Activator.luceneIndexRepository, Activator.jarFileIndexer, Activator.luceneWriteIndexFromFileExample, Activator.searchResultToEditorConverter);
     }
 
-    public DialogOpenerHandler(LuceneIndexRepository repository, JarFileIndexer indexer, LuceneWriteIndexFromFileExample luceneWriteIndexFromFileExample) {
+    public DialogOpenerHandler(LuceneIndexRepository repository, JarFileIndexer indexer, LuceneWriteIndexFromFileExample luceneWriteIndexFromFileExample,
+            SearchResultToEditorConverter searchResultToEditorConverter) {
         this.repository = repository;
         this.indexer = indexer;
         this.luceneWriteIndexFromFileExample = luceneWriteIndexFromFileExample;
+        this.searchResultToEditorConverter = searchResultToEditorConverter;
     }
 
     @Override
@@ -54,12 +57,13 @@ public class DialogOpenerHandler extends AbstractHandler {
         try {
             IndexReaderAndMappingDomain indexReader = getIndexReaderFor(javaProjects);
             Display.getDefault().asyncExec(() -> {
-                FileTreeWindow dialog = new FileTreeWindow(PlatformUI.getWorkbench().getActiveWorkbenchWindow().getShell(), indexReader, luceneWriteIndexFromFileExample);
+                FileTreeWindow dialog = new FileTreeWindow(PlatformUI.getWorkbench().getActiveWorkbenchWindow().getShell(), indexReader, luceneWriteIndexFromFileExample,
+                        searchResultToEditorConverter);
                 dialog.open();
             });
         } catch (JavaModelException e) {
             e.printStackTrace();
-        } catch (IOException e) {
+        } catch (Exception e) {
             e.printStackTrace();
         }
 

@@ -72,11 +72,12 @@ public class JarFileIndexer {
             try {
                 reader = DirectoryReader.open(FSDirectory.open(Paths.get(indexName)));
                 repository.addIndexerForId(indexName, reader);
+                return reader;
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
         }
-        throw new RuntimeException("Not supported");
+        throw new RuntimeException("Not supported " + file.getAbsolutePath());
     }
 
     public static String readString(InputStream inputStream) throws IOException {
