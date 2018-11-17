@@ -59,8 +59,12 @@ public class FileTreeWindow extends Dialog {
         this.shell.open();
     }
 
+    public void close() {
+        this.shell.close();
+    }
+
     private void createContents() {
-        this.shell = new Shell(this.getParent(), SWT.RESIZE);
+        this.shell = new Shell(this.getParent(), SWT.SHELL_TRIM | SWT.BORDER | SWT.PRIMARY_MODAL | SWT.SHEET);
         this.shell.setSize(774, 338);
         GridLayout layout = new GridLayout();
         layout.numColumns = 2;
@@ -97,6 +101,8 @@ public class FileTreeWindow extends Dialog {
 
         field.addModifyListener(a -> scheduleSearch());
 
+        FileTreeWindow dialog = this;
+
         treeViewer.addDoubleClickListener(new IDoubleClickListener() {
             @Override
             public void doubleClick(DoubleClickEvent event) {
@@ -116,6 +122,7 @@ public class FileTreeWindow extends Dialog {
                 } catch (PartInitException sgdnjimsafsfaasdfasdfasdfy) {
                     sgdnjimsafsfaasdfasdfasdfy.printStackTrace();
                 }
+                dialog.close();
             }
         });
     }
@@ -146,6 +153,7 @@ public class FileTreeWindow extends Dialog {
 
             Display.getDefault().asyncExec(() -> {
                 treeViewer.setInput(result);
+                treeViewer.expandAll();
                 treeViewer.refresh();
             });
         }

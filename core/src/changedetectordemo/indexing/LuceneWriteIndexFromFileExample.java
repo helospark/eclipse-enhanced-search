@@ -1,6 +1,5 @@
 package changedetectordemo.indexing;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -16,6 +15,7 @@ import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.FieldType;
+import org.apache.lucene.index.Fields;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
@@ -27,7 +27,6 @@ import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.highlight.Formatter;
-import org.apache.lucene.search.highlight.Fragmenter;
 import org.apache.lucene.search.highlight.Highlighter;
 import org.apache.lucene.search.highlight.QueryScorer;
 import org.apache.lucene.search.highlight.SimpleHTMLFormatter;
@@ -40,7 +39,6 @@ import com.helospark.lightdi.annotation.Component;
 
 @Component
 public class LuceneWriteIndexFromFileExample {
-    private static final String PATH = "/tmp/lucene/";
 
     private static final String CONTENTS_FIELD = "contents";
     private UniqueNameCalculator uniqueNameCalculator;
@@ -97,9 +95,9 @@ public class LuceneWriteIndexFromFileExample {
         return fieldType;
     }
 
-    public boolean hasIndex(String uniqueId) {
-        return new File(PATH + uniqueId).exists();
-    }
+//    public boolean hasIndex(String uniqueId) {
+//        return new File(PATH + uniqueId).exists();
+//    }
 
 //    private IndexSearcher searcher = null;
 //    private IndexReader reader;
@@ -164,7 +162,7 @@ public class LuceneWriteIndexFromFileExample {
             Formatter formatter = new SimpleHTMLFormatter();
             QueryScorer scorer = new QueryScorer(query);
             Highlighter highlighter = new Highlighter(formatter, scorer);
-            Fragmenter fragmenter = new SimpleSpanFragmenter(scorer, 30);
+            SimpleSpanFragmenter fragmenter = new SimpleSpanFragmenter(scorer, 30);
             highlighter.setTextFragmenter(fragmenter);
 
             List<LuceneSearchResult> fullyQualifiedNames = new ArrayList<>();
@@ -182,19 +180,23 @@ public class LuceneWriteIndexFromFileExample {
                 if (request.isIncludeContent()) {
                     String content = doc.get(CONTENTS_FIELD);
 
-                    TokenStream stream = TokenSources.getTermVectorTokenStreamOrNull(CONTENTS_FIELD, request.getMultiReader().getTermVectors(docid), -1);
+                    Fields termVector = request.getMultiReader().getTermVectors(docid);
+                    TokenStream stream = TokenSources.getTermVectorTokenStreamOrNull(CONTENTS_FIELD, termVector, -1);
 
                     String[] frags = highlighter.getBestFragments(stream, content, 10);
                     for (String frag : frags) {
                         String line = frag.replace("\n", " ");
                         result.addTextSearchResultFragment(new TextSearchResult(line, result));
                     }
+
                 }
 
                 fullyQualifiedNames.add(result);
             }
             return new LuceneSearchResultRoot(fullyQualifiedNames);
-        } catch (Exception e) {
+        } catch (
+
+        Exception e) {
             throw new RuntimeException(e);
         }
     }

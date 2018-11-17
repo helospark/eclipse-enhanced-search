@@ -86,16 +86,21 @@ public class DialogOpenerHandler extends AbstractHandler {
                             JarPackageFragmentRoot jpf = (JarPackageFragmentRoot) child;
                             String filePathUsed;
                             Optional<IndexReader> indexReader = getIndexReader(jpf.getPath());
+                            IPath path = jpf.getSourceAttachmentPath();
+                            if (path == null) {
+                                System.out.println("Skipping " + jpf.getPath());
+                                continue;
+                            }
                             if (indexReader.isPresent()) {
                                 filePathUsed = jpf.getPath().toFile().getAbsolutePath();
                             } else {
-                                indexReader = getIndexReader(jpf.getSourceAttachmentPath());
-                                filePathUsed = jpf.getSourceAttachmentPath().toFile().getAbsolutePath();
+                                indexReader = getIndexReader(path);
+                                filePathUsed = path.toFile().getAbsolutePath();
                             }
 
                             if (!indexReader.isPresent()) {
-                                readers.add(indexer.indexFile(jpf.getSourceAttachmentPath().toFile()));
-                                filePathUsed = jpf.getSourceAttachmentPath().toFile().getAbsolutePath();
+                                readers.add(indexer.indexFile(path.toFile()));
+                                filePathUsed = path.toFile().getAbsolutePath();
                             } else {
                                 readers.add(indexReader.get());
                             }

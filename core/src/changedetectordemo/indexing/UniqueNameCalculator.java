@@ -16,7 +16,7 @@ public class UniqueNameCalculator {
 //        } catch (Exception e) {
 //            throw new RuntimeException(e);
 //        }
-        return "/tmp/lucene/" + file.getName() + "_" + file.length();
+        return System.getProperty("java.io.tmpdir") + "/lucene/" + file.getName() + "_" + file.length();
     }
 //
 //    public String toHexString(byte[] bytes) {
