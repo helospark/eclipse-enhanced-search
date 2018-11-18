@@ -106,49 +106,6 @@ public class LuceneWriteIndexFromFileExample {
         return fieldType;
     }
 
-//    public boolean hasIndex(String uniqueId) {
-//        return new File(PATH + uniqueId).exists();
-//    }
-
-//    private IndexSearcher searcher = null;
-//    private IndexReader reader;
-//
-//    public void search(List<LuceneRequest> files, String content) throws IOException, InvalidTokenOffsetsException, ParseException {
-//        // analyzer with the default stop words
-//        Analyzer analyzer = new StandardAnalyzer();
-//
-//        if (searcher == null) {
-//            searcher = createSearcer(files);
-//        }
-//
-//        QueryParser qp = new QueryParser(CONTENTS_FIELD, analyzer);
-//        Query query = qp.parse(content);
-//        TopDocs hits = searcher.search(query, 10);
-//        Formatter formatter = new SimpleHTMLFormatter();
-//        QueryScorer scorer = new QueryScorer(query);
-//        Highlighter highlighter = new Highlighter(formatter, scorer);
-//        Fragmenter fragmenter = new SimpleSpanFragmenter(scorer, 60);
-//        highlighter.setTextFragmenter(fragmenter);
-//
-//        for (int i = 0; i < hits.scoreDocs.length; i++) {
-//            int docid = hits.scoreDocs[i].doc;
-//            Document doc = searcher.doc(docid);
-//            String title = doc.get("path");
-//
-//            System.out.println("Path " + " : " + title);
-//
-//            String text = doc.get("contents");
-//
-//            TokenStream stream = TokenSources.getAnyTokenStream(reader, docid, "contents", analyzer);
-//
-//            String[] frags = highlighter.getBestFragments(stream, text, 10);
-//            for (String frag : frags) {
-//                System.out.println("=======================");
-//                System.out.println(frag);
-//            }
-//        }
-//    }
-
     private IndexSearcher createSearcer(IndexReader multiReader) throws IOException {
         return new IndexSearcher(multiReader);
     }
@@ -189,7 +146,6 @@ public class LuceneWriteIndexFromFileExample {
                 String indexPath = doc.get("indexPath");
                 String jarName = doc.get("jarPath");
 
-//                System.out.println(title);
                 LuceneSearchResult result = new LuceneSearchResult(indexPath, title, jarName);
 
                 if (request.isIncludeContent()) {
@@ -204,7 +160,7 @@ public class LuceneWriteIndexFromFileExample {
 
                     String[] frags = highlighter.getBestFragments(stream, content, 10);
                     for (String frag : frags) {
-                        String line = frag.replace("\n", " ");
+                        String line = frag.replace("\n", " ").trim();
                         result.addTextSearchResultFragment(new TextSearchResult(line, result));
                     }
 

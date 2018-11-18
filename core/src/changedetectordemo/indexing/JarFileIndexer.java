@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Paths;
 import java.util.Enumeration;
+import java.util.Optional;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -37,8 +38,10 @@ public class JarFileIndexer {
     private IndexReader indexSingleFile(File file) {
         String indexName = uniqueNameCalculator.indexPathCalculator(file);
 
-        if (!new File(indexName).exists()) {
-
+        Optional<DirectoryReader> optionalReader = exceptionSafeReaderGet(indexName);
+        if (optionalReader.isPresent()) {
+            return optionalReader.get();
+        } else {
             System.out.println("Actually indexing " + file.getName());
             if (file.getName().endsWith(".jar") || file.getName().endsWith(".zip")) {
                 try (ZipFile zipFile = new ZipFile(file)) {
@@ -59,7 +62,7 @@ public class JarFileIndexer {
                         }
                     }
                     writer.close();
-                    DirectoryReader reader = DirectoryReader.open(FSDirectory.open(Paths.get(indexName)));
+                    DirectoryReader reader = exceptionSafeReaderGet(indexName).get();
                     repository.addIndexerForId(indexName, reader);
                     return reader;
                 } catch (IOException e1) {
@@ -67,17 +70,16 @@ public class JarFileIndexer {
                     throw new RuntimeException(e1);
                 }
             }
-        } else {
-            DirectoryReader reader;
-            try {
-                reader = DirectoryReader.open(FSDirectory.open(Paths.get(indexName)));
-                repository.addIndexerForId(indexName, reader);
-                return reader;
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
         }
         throw new RuntimeException("Not supported " + file.getAbsolutePath());
+    }
+
+    private Optional<DirectoryReader> exceptionSafeReaderGet(String indexName) {
+        try {
+            return Optional.ofNullable(DirectoryReader.open(FSDirectory.open(Paths.get(indexName))));
+        } catch (Exception e) {
+            return Optional.empty();
+        }
     }
 
     public static String readString(InputStream inputStream) throws IOException {
