@@ -23,6 +23,7 @@ import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Dialog;
 import org.eclipse.swt.widgets.Display;
+import org.eclipse.swt.widgets.Group;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Text;
 import org.eclipse.ui.PartInitException;
@@ -45,6 +46,7 @@ public class FileTreeWindow extends Dialog {
     Button contentCheckbox;
     Button filePathCheckbox;
     TreeViewer treeViewer;
+    Button caseSensitiveButton;
 
     public FileTreeWindow(Shell shell, IndexReaderAndMappingDomain indexReader, LuceneWriteIndexFromFileExample luceneWriteIndexFromFileExample,
             SearchResultToEditorConverter searchResultToEditorConverter) {
@@ -74,7 +76,11 @@ public class FileTreeWindow extends Dialog {
 
         field = new Text(shell, SWT.SEARCH);
 
-        Composite checkboxComposite = new Composite(shell, 0);
+        Composite underSearchRow = new Composite(shell, 0);
+        underSearchRow.setLayout(new RowLayout());
+
+        Group checkboxComposite = new Group(underSearchRow, SWT.SHADOW_ETCHED_IN);
+        checkboxComposite.setText("search in");
         checkboxComposite.setLayout(new RowLayout());
         fileNameCheckBox = new Button(checkboxComposite, SWT.CHECK);
         fileNameCheckBox.setText("filename");
@@ -89,6 +95,13 @@ public class FileTreeWindow extends Dialog {
         contentCheckbox = new Button(checkboxComposite, SWT.CHECK);
         contentCheckbox.setText("content");
         addSearchOnChangedListener(contentCheckbox);
+
+        Group caseSensitiveGroup = new Group(underSearchRow, SWT.SHADOW_ETCHED_IN);
+        caseSensitiveGroup.setLayout(new RowLayout());
+        caseSensitiveGroup.setText("criteria");
+        caseSensitiveButton = new Button(caseSensitiveGroup, SWT.CHECK);
+        caseSensitiveButton.setText("Case sensitive");
+        addSearchOnChangedListener(caseSensitiveButton);
 
         treeViewer = new TreeViewer(shell);
         treeViewer.setLabelProvider(new MyLabelProvider());
@@ -146,6 +159,7 @@ public class FileTreeWindow extends Dialog {
                     .withIncludeContent(contentCheckbox.getSelection())
                     .withIncludeFileName(fileNameCheckBox.getSelection())
                     .withIncludeFilePath(filePathCheckbox.getSelection())
+                    .withCaseSensitive(caseSensitiveButton.getSelection())
                     .withMultiReader(indexReader.indexReader)
                     .build();
 

@@ -9,9 +9,9 @@ import java.util.List;
 import javax.annotation.Generated;
 
 import org.apache.lucene.analysis.Analyzer;
+import org.apache.lucene.analysis.LowerCaseFilter;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.core.WhitespaceAnalyzer;
-import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.FieldType;
@@ -40,7 +40,13 @@ import com.helospark.lightdi.annotation.Component;
 @Component
 public class LuceneWriteIndexFromFileExample {
 
+    private static final String FILEPATH_FIELD = "path";
+    private static final String FILENAME_FIELD = "filename";
     private static final String CONTENTS_FIELD = "contents";
+
+    private static final String FILEPATH_FIELD_CASE_INSENSITIVE = "path_insensitive";
+    private static final String FILENAME_FIELD_CASE_INSENSITIVE = "filename_insensitive";
+    private static final String CONTENTS_FIELD_CASE_INSENSITIVE = "contents_insensitive";
     private UniqueNameCalculator uniqueNameCalculator;
 
     public LuceneWriteIndexFromFileExample(UniqueNameCalculator uniqueNameCalculator) {
@@ -53,7 +59,7 @@ public class LuceneWriteIndexFromFileExample {
             Directory dir = FSDirectory.open(Paths.get(indexLocation));
 
             // analyzer with the default stop words
-            Analyzer analyzer = new StandardAnalyzer();
+            Analyzer analyzer = new WhitespaceAnalyzer();
 
             // IndexWriter Configuration
             IndexWriterConfig iwc = new IndexWriterConfig(analyzer);
@@ -74,13 +80,18 @@ public class LuceneWriteIndexFromFileExample {
         int slashPosition = fullPath.lastIndexOf("/");
         String fileName = slashPosition == -1 ? fullPath : fullPath.substring(slashPosition + 1);
 
-        doc.add(new Field("path", fullPath, createStoredAndIndexedField()));
-        doc.add(new Field("filename", fileName, createStoredAndIndexedField()));
+        doc.add(new Field(FILEPATH_FIELD, fullPath, createStoredAndIndexedField()));
+        doc.add(new Field(FILENAME_FIELD, fileName, createStoredAndIndexedField()));
         doc.add(new Field(CONTENTS_FIELD, entity.data, createStoredAndIndexedField()));
+
+        doc.add(new Field(FILEPATH_FIELD_CASE_INSENSITIVE, fullPath.toLowerCase(), createStoredAndIndexedField()));
+        doc.add(new Field(FILENAME_FIELD_CASE_INSENSITIVE, fileName.toLowerCase(), createStoredAndIndexedField()));
+        doc.add(new Field(CONTENTS_FIELD_CASE_INSENSITIVE, entity.data.toLowerCase(), createStoredAndIndexedField()));
+
         doc.add(new Field("indexPath", entity.indexPath, createStoredAndIndexedField()));
         doc.add(new Field("jarPath", entity.jarPath, createStoredAndIndexedField()));
 
-        writer.updateDocument(new Term("path", fullPath), doc);
+        writer.updateDocument(new Term(FILEPATH_FIELD, fullPath), doc);
 
     }
 
@@ -145,10 +156,14 @@ public class LuceneWriteIndexFromFileExample {
     public LuceneSearchResultRoot findFile(SearchRequest request) {
         try {
             Analyzer analyzer = new WhitespaceAnalyzer();
-
             IndexSearcher searcher = createSearcer(request.getMultiReader());
 
             String[] fields = createRequest(request);
+
+            String searchString = request.getContent();
+            if (request.caseSensitive) {
+                searchString.toLowerCase();
+            }
 
             if (fields.length == 0) {
                 return new LuceneSearchResultRoot(Collections.emptyList());
@@ -156,7 +171,7 @@ public class LuceneWriteIndexFromFileExample {
 
             MultiFieldQueryParser multiFieldQuers = new MultiFieldQueryParser(fields, analyzer);
             multiFieldQuers.setAllowLeadingWildcard(true);
-            Query query = multiFieldQuers.parse(request.getContent());
+            Query query = multiFieldQuers.parse(searchString);
             TopDocs hits = searcher.search(query, 10);
 
             Formatter formatter = new SimpleHTMLFormatter();
@@ -170,7 +185,7 @@ public class LuceneWriteIndexFromFileExample {
             for (int i = 0; i < hits.scoreDocs.length; i++) {
                 int docid = hits.scoreDocs[i].doc;
                 Document doc = searcher.doc(docid);
-                String title = doc.get("path");
+                String title = doc.get(FILEPATH_FIELD);
                 String indexPath = doc.get("indexPath");
                 String jarName = doc.get("jarPath");
 
@@ -182,6 +197,10 @@ public class LuceneWriteIndexFromFileExample {
 
                     Fields termVector = request.getMultiReader().getTermVectors(docid);
                     TokenStream stream = TokenSources.getTermVectorTokenStreamOrNull(CONTENTS_FIELD, termVector, -1);
+
+                    if (!request.caseSensitive) {
+                        stream = new LowerCaseFilter(stream);
+                    }
 
                     String[] frags = highlighter.getBestFragments(stream, content, 10);
                     for (String frag : frags) {
@@ -204,13 +223,25 @@ public class LuceneWriteIndexFromFileExample {
     private String[] createRequest(SearchRequest request) {
         List<String> result = new ArrayList<>();
         if (request.isIncludeContent()) {
-            result.add(CONTENTS_FIELD);
+            if (request.caseSensitive) {
+                result.add(CONTENTS_FIELD);
+            } else {
+                result.add(CONTENTS_FIELD_CASE_INSENSITIVE);
+            }
         }
         if (request.isIncludeFileName()) {
-            result.add("filename");
+            if (request.caseSensitive) {
+                result.add(FILENAME_FIELD);
+            } else {
+                result.add(FILENAME_FIELD_CASE_INSENSITIVE);
+            }
         }
         if (request.isIncludeFilePath()) {
-            result.add("path");
+            if (request.caseSensitive) {
+                result.add(FILEPATH_FIELD);
+            } else {
+                result.add(FILEPATH_FIELD_CASE_INSENSITIVE);
+            }
         }
         return result.toArray(new String[result.size()]);
     }
@@ -230,6 +261,7 @@ public class LuceneWriteIndexFromFileExample {
         boolean includeFileName;
         boolean includeFilePath;
         boolean includeContent;
+        boolean caseSensitive;
 
         @Generated("SparkTools")
         private SearchRequest(Builder builder) {
@@ -238,6 +270,7 @@ public class LuceneWriteIndexFromFileExample {
             this.includeFileName = builder.includeFileName;
             this.includeFilePath = builder.includeFilePath;
             this.includeContent = builder.includeContent;
+            this.caseSensitive = builder.caseSensitive;
         }
 
         public IndexReader getMultiReader() {
@@ -260,8 +293,8 @@ public class LuceneWriteIndexFromFileExample {
             return includeContent;
         }
 
-        @Generated("SparkTools")
-        public SearchRequest() {
+        public boolean isCaseSensitive() {
+            return caseSensitive;
         }
 
         @Generated("SparkTools")
@@ -276,6 +309,7 @@ public class LuceneWriteIndexFromFileExample {
             private boolean includeFileName;
             private boolean includeFilePath;
             private boolean includeContent;
+            private boolean caseSensitive;
 
             private Builder() {
             }
@@ -302,6 +336,11 @@ public class LuceneWriteIndexFromFileExample {
 
             public Builder withIncludeContent(boolean includeContent) {
                 this.includeContent = includeContent;
+                return this;
+            }
+
+            public Builder withCaseSensitive(boolean caseSensitive) {
+                this.caseSensitive = caseSensitive;
                 return this;
             }
 
