@@ -7,6 +7,7 @@ import org.osgi.framework.BundleContext;
 
 import changedetectordemo.handlers.LuceneIndexRepository;
 import changedetectordemo.handlers.SearchResultToEditorConverter;
+import changedetectordemo.handlers.SourceDownloaderService;
 import changedetectordemo.indexing.JarFileIndexer;
 import changedetectordemo.indexing.LuceneWriteIndexFromFileExample;
 import changedetectordemo.indexing.UniqueNameCalculator;
@@ -37,6 +38,7 @@ public class Activator extends AbstractUIPlugin implements IStartup {
     public static LuceneWriteIndexFromFileExample luceneWriteIndexFromFileExample;
 
     public static SearchResultToEditorConverter searchResultToEditorConverter;
+    public static SourceDownloaderService sourceDownloaderService;
 
     static {
         UniqueNameCalculator unc = new UniqueNameCalculator();
@@ -44,6 +46,7 @@ public class Activator extends AbstractUIPlugin implements IStartup {
         luceneIndexRepository = new LuceneIndexRepository(unc);
         jarFileIndexer = new JarFileIndexer(luceneWriteIndexFromFileExample, unc, luceneIndexRepository);
         searchResultToEditorConverter = new SearchResultToEditorConverter();
+        sourceDownloaderService = new SourceDownloaderService();
     }
 
     /*

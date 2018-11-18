@@ -36,17 +36,20 @@ public class DialogOpenerHandler extends AbstractHandler {
     private JarFileIndexer indexer;
     private LuceneWriteIndexFromFileExample luceneWriteIndexFromFileExample;
     private SearchResultToEditorConverter searchResultToEditorConverter;
+    private SourceDownloaderService sourceDownloaderService;
 
     public DialogOpenerHandler() {
-        this(Activator.luceneIndexRepository, Activator.jarFileIndexer, Activator.luceneWriteIndexFromFileExample, Activator.searchResultToEditorConverter);
+        this(Activator.luceneIndexRepository, Activator.jarFileIndexer, Activator.luceneWriteIndexFromFileExample, Activator.searchResultToEditorConverter,
+                Activator.sourceDownloaderService);
     }
 
     public DialogOpenerHandler(LuceneIndexRepository repository, JarFileIndexer indexer, LuceneWriteIndexFromFileExample luceneWriteIndexFromFileExample,
-            SearchResultToEditorConverter searchResultToEditorConverter) {
+            SearchResultToEditorConverter searchResultToEditorConverter, SourceDownloaderService sourceDownloaderService) {
         this.repository = repository;
         this.indexer = indexer;
         this.luceneWriteIndexFromFileExample = luceneWriteIndexFromFileExample;
         this.searchResultToEditorConverter = searchResultToEditorConverter;
+        this.sourceDownloaderService = sourceDownloaderService;
     }
 
     @Override
@@ -93,14 +96,21 @@ public class DialogOpenerHandler extends AbstractHandler {
                                 String filePathUsed;
                                 Optional<IndexReader> indexReader = getIndexReader(jpf.getPath());
                                 IPath path = jpf.getSourceAttachmentPath();
-                                if (path == null) {
-                                    System.out.println("Skipping " + jpf.getPath());
-                                    decreaseRemaining(dialogInput);
-                                    continue;
-                                }
+
                                 if (indexReader.isPresent()) {
                                     filePathUsed = jpf.getPath().toFile().getAbsolutePath();
                                 } else {
+                                    if (path == null) {
+                                        System.out.println("Attempting to download source for " + jpf.getPath());
+                                        if (!sourceDownloaderService.attemptToDownloadSource(jpf)) {
+                                            System.out.println("Skipping " + jpf.getPath());
+                                            decreaseRemaining(dialogInput);
+                                            continue;
+                                        } else {
+                                            path = jpf.getSourceAttachmentPath();
+                                        }
+                                    }
+
                                     indexReader = getIndexReader(path);
                                     filePathUsed = path.toFile().getAbsolutePath();
                                 }
