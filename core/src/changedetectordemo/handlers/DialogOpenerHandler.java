@@ -103,9 +103,8 @@ public class DialogOpenerHandler extends AbstractHandler {
                                     if (path == null) {
                                         System.out.println("Attempting to download source for " + jpf.getPath());
                                         if (!sourceDownloaderService.attemptToDownloadSource(jpf)) {
-                                            System.out.println("Skipping " + jpf.getPath());
-                                            decreaseRemaining(dialogInput);
-                                            continue;
+                                            System.out.println("Unable to download the source " + jpf.getPath());
+                                            path = jpf.getPath();
                                         } else {
                                             path = jpf.getSourceAttachmentPath();
                                         }

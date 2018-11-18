@@ -8,6 +8,7 @@ import org.osgi.framework.BundleContext;
 import changedetectordemo.handlers.LuceneIndexRepository;
 import changedetectordemo.handlers.SearchResultToEditorConverter;
 import changedetectordemo.handlers.SourceDownloaderService;
+import changedetectordemo.indexing.ClassDecompiler;
 import changedetectordemo.indexing.JarFileIndexer;
 import changedetectordemo.indexing.LuceneWriteIndexFromFileExample;
 import changedetectordemo.indexing.UniqueNameCalculator;
@@ -44,7 +45,7 @@ public class Activator extends AbstractUIPlugin implements IStartup {
         UniqueNameCalculator unc = new UniqueNameCalculator();
         luceneWriteIndexFromFileExample = new LuceneWriteIndexFromFileExample(unc);
         luceneIndexRepository = new LuceneIndexRepository(unc);
-        jarFileIndexer = new JarFileIndexer(luceneWriteIndexFromFileExample, unc, luceneIndexRepository);
+        jarFileIndexer = new JarFileIndexer(luceneWriteIndexFromFileExample, unc, luceneIndexRepository, new ClassDecompiler());
         searchResultToEditorConverter = new SearchResultToEditorConverter();
         sourceDownloaderService = new SourceDownloaderService();
     }

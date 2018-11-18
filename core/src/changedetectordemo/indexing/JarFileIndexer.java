@@ -24,11 +24,14 @@ public class JarFileIndexer {
     private LuceneWriteIndexFromFileExample luceneWriteIndexFromFileExample;
     private UniqueNameCalculator uniqueNameCalculator;
     private LuceneIndexRepository repository;
+    private ClassDecompiler decompiler;
 
-    public JarFileIndexer(LuceneWriteIndexFromFileExample luceneWriteIndexFromFileExample, UniqueNameCalculator uniqueNameCalculator, LuceneIndexRepository repository) {
+    public JarFileIndexer(LuceneWriteIndexFromFileExample luceneWriteIndexFromFileExample, UniqueNameCalculator uniqueNameCalculator, LuceneIndexRepository repository,
+            ClassDecompiler decompiler) {
         this.luceneWriteIndexFromFileExample = luceneWriteIndexFromFileExample;
         this.uniqueNameCalculator = uniqueNameCalculator;
         this.repository = repository;
+        this.decompiler = decompiler;
     }
 
     public IndexReader indexFile(File file) throws IOException {
@@ -51,14 +54,9 @@ public class JarFileIndexer {
                     while (entries.hasMoreElements()) {
                         ZipEntry entry = entries.nextElement();
                         if (!entry.isDirectory()) {
-                            try (InputStream inputStream = zipFile.getInputStream(entry)) {
-                                String data = readString(inputStream);
-                                String path = entry.getName();
-
-                                luceneWriteIndexFromFileExample.addToIndex(writer, new IndexEntity(data, path, indexName, file.getAbsolutePath()));
-                            } catch (IOException e) {
-                                throw new RuntimeException("Error unzipping file ", e);
-                            }
+                            String data = readFile(zipFile, entry);
+                            String path = entry.getName();
+                            luceneWriteIndexFromFileExample.addToIndex(writer, new IndexEntity(data, path, indexName, file.getAbsolutePath()));
                         }
                     }
                     writer.close();
@@ -74,6 +72,20 @@ public class JarFileIndexer {
         throw new RuntimeException("Not supported " + file.getAbsolutePath());
     }
 
+    private String readFile(ZipFile zipFile, ZipEntry entry) {
+        try (InputStream inputStream = zipFile.getInputStream(entry)) {
+            if (entry.getName().endsWith(".class")) {
+                byte[] data = readBinary(inputStream).toByteArray();
+                System.out.println("Decompiling " + entry.getName());
+                return decompiler.decompile(data, entry.getName());
+            } else { // TODO: other binary types
+                return readString(inputStream);
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Error unzipping file ", e);
+        }
+    }
+
     private Optional<DirectoryReader> exceptionSafeReaderGet(String indexName) {
         try {
             return Optional.ofNullable(DirectoryReader.open(FSDirectory.open(Paths.get(indexName))));
@@ -83,13 +95,18 @@ public class JarFileIndexer {
     }
 
     public static String readString(InputStream inputStream) throws IOException {
+        ByteArrayOutputStream into = readBinary(inputStream);
+        return new String(into.toByteArray(), "UTF-8");
+    }
+
+    private static ByteArrayOutputStream readBinary(InputStream inputStream) throws IOException {
         ByteArrayOutputStream into = new ByteArrayOutputStream();
         byte[] buf = new byte[4096];
         for (int n; 0 < (n = inputStream.read(buf));) {
             into.write(buf, 0, n);
         }
         into.close();
-        return new String(into.toByteArray(), "UTF-8");
+        return into;
     }
 
 }
